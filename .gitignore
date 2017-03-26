@@ -1,0 +1,7 @@
+*.pyc
+__pycache__
+myvenv
+results
+logs
+cookies.txt
+domens.txt
