@@ -4,6 +4,10 @@ import pycurl
 from user_agent import generate_user_agent
 
 
+RE_XML_DECLARATION =\
+    re.compile(br'^[^<]{,100}<\?xml[^>]+\?>', re.I)
+RE_DECLARATION_ENCODING =\
+    re.compile(br'encoding\s*=\s*["\']([^"\']+)["\']')
 RE_META_CHARSET =\
     re.compile(br'<meta[^>]+content\s*=\s*[^>]+charset=([-\w]+)', re.I)
 RE_META_CHARSET_HTML5 =\
@@ -28,6 +32,7 @@ class Net(object):
         self.set_headers()
         self.settings()
         self.referer = None
+        self.effective_url = ''
         if self.config['usecookies']:
             self.set_cookies()
         if not not_use_proxy and proxy:
@@ -58,7 +63,7 @@ class Net(object):
         body_chunk = self.response_body_chunks
         headers = self.response_header_chunks
         if body_chunk:
-            # Try to extract charset from http-equiv meta tag
+            """Try to extract charset from http-equiv meta tag"""
             match_charset = RE_META_CHARSET.search(body_chunk)
             if match_charset:
                 charset = match_charset.group(1)
@@ -66,6 +71,16 @@ class Net(object):
                 match_charset_html5 = RE_META_CHARSET_HTML5.search(body_chunk)
                 if match_charset_html5:
                     charset = match_charset_html5.group(1)
+            """Try to find encoding in xml"""
+            if not charset:
+                if body_chunk.startswith(b'<?xml'):
+                    match = RE_XML_DECLARATION.search(body_chunk)
+                    if match:
+                        enc_match = RE_DECLARATION_ENCODING.search(
+                            match.group(0))
+                        if enc_match:
+                            charset = enc_match.group(1)
+            """Try to find encoding in headers' server inside Content-Type"""
             if not charset:
                 if 'Content-Type' in headers:
                     pos = headers['Content-Type'].find('charset=')
@@ -74,13 +89,19 @@ class Net(object):
                     else:
                         charset = "utf-8"
                 else:
-                    logger.info('Not found charset document.')
+                    logger.debug('Not found charset\'s document at url: %s.', self.effective_url)
                     charset = "utf-8"
+
             if charset:
                 charset = charset.lower()
                 if not isinstance(charset, str):
                     charset = charset.decode('utf-8')
-                self.response_body_chunks = body_chunk.decode(charset)
+
+                try:
+                    self.response_body_chunks = body_chunk.decode(charset)
+                except UnicodeDecodeError:
+                    logger.debug('UnicodeDecodeError: Not found charset\'s document at url: %s', self.effective_url)
+                    self.response_body_chunks = ''
 
     def set_cookies(self, cookie=None, cookiefile='cookies.txt'):
         self.curl.setopt(pycurl.COOKIEFILE, cookiefile)
@@ -160,9 +181,9 @@ class Net(object):
         self.curl.setopt(pycurl.WRITEFUNCTION, self.body_processor)
         try:
             self.curl.perform()
+            self.effective_url = effective_url = self.curl.getinfo(pycurl.EFFECTIVE_URL)
             self.prepare_response()
             page = self.response_body_chunks
-            effective_url = self.curl.getinfo(pycurl.EFFECTIVE_URL)
             logger.info('Current url after execution request: %s',
                         effective_url)
             if self.config['autoreferer'] and not not_use_autoref:
