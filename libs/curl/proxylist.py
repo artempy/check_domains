@@ -60,8 +60,7 @@ class ProxyList(object):
             if self.url:
                 self.get_proxies_from_url()
             elif self.filename:
-                if not self.get_proxies_from_file():
-                    self.get_proxies_from_url()
+                self.get_proxies_from_file()
             if len(self.proxylist) > 0:
                 break
             sleep(self.config['sleepattemptloadproxies'])
