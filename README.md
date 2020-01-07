@@ -15,7 +15,7 @@ Step 3:
 $ pip install -r requirements.txt
 ```
 
-Create a ```domens.txt``` file:
+Step 4: Create a ```domens.txt``` file:
 ```
 test.com
 test1.com
